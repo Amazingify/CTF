@@ -1,3 +1,3 @@
-module github.com/amazingify/ctf/x/hal/testutil
+module github.com/amazingify/CTF/x/hal/testutil
 
 go 1.17
