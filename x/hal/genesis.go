@@ -1,14 +1,15 @@
-package keeper
+package hal
 
 import (
 	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/gaia/v7/x/hal/keeper"
 	"github.com/cosmos/gaia/v7/x/hal/types"
 )
 
 // InitGenesis performs module's genesis initialization.
-func (k Keeper) InitGenesis(ctx sdk.Context, genState types.GenesisState) {
+func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) {
 	k.SetParams(ctx, genState.Params)
 
 	for _, entry := range genState.RedeemEntries {
@@ -25,7 +26,7 @@ func (k Keeper) InitGenesis(ctx sdk.Context, genState types.GenesisState) {
 }
 
 // ExportGenesis returns the current module genesis state.
-func (k Keeper) ExportGenesis(ctx sdk.Context) *types.GenesisState {
+func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *types.GenesisState {
 	params := k.GetParams(ctx)
 
 	var entries []types.RedeemEntry
