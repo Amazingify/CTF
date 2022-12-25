@@ -3,12 +3,13 @@ package keeper
 import (
 	"context"
 
+	"time"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkErrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/gaia/v7/x/hal/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"time"
 )
 
 var _ types.MsgServer = (*msgServer)(nil)
@@ -39,7 +40,7 @@ func (k msgServer) MintHAL(goCtx context.Context, req *types.MsgMintHAL) (*types
 	if halCoin.IsZero() {
 		return nil, sdkErrors.Wrapf(sdkErrors.ErrInsufficientFunds, "can not mint HAL tokens with provided collaterals")
 	}
-
+	println("here")
 	if err := k.bankKeeper.SendCoinsFromAccountToModule(ctx, accAddr, types.ActivePoolName, colUsedCoins); err != nil {
 		return nil, err
 	}
@@ -85,8 +86,7 @@ func (k msgServer) RedeemCollateral(goCtx context.Context, req *types.MsgRedeemC
 		return nil, sdkErrors.Wrapf(types.ErrInternal, "transferring collateral coins (%s) between pools: %v", colCoins, err)
 	}
 
-
-	completionTime := time.Now() 
+	completionTime := time.Now()
 	return &types.MsgRedeemCollateralResponse{
 		BurnedAmount:   halUsedCoin,
 		RedeemedAmount: colCoins,
