@@ -64,19 +64,21 @@ func SetBankMocks(bank *testutil.MockBankKeeper) {
 	bank.EXPECT().GetAllBalances(gomock.Any(), gomock.Any())
 }
 
-func TestConfigurations(t *testing.T) {
-	_, _, context, keeper, _ := setupKeeperAndContext(t)
-	ctx := sdk.UnwrapSDKContext(context)
-	hal.InitGenesis(ctx, *keeper, *types.DefaultGenesisState())
-
+func setupParams(context *context.Context, k *keeper.Keeper) {
+	ctx := sdk.UnwrapSDKContext(*context)
+	hal.InitGenesis(ctx, *k, *types.DefaultGenesisState())
 	var collateralMeta []types.TokenMeta
 	collateralMeta = append(collateralMeta, types.TokenMeta{
 		Denom:       "coin",
 		Decimals:    6,
 		Description: "",
 	})
-
-	keeper.SetParams(ctx, types.NewParams(10000, 10, collateralMeta, types.TokenMeta{Denom: "hal", Decimals: 6, Description: ""}))
+	k.SetParams(ctx, types.NewParams(10000, 10, collateralMeta, types.TokenMeta{Denom: "hal", Decimals: 6, Description: ""}))
+}
+func TestConfigurations(t *testing.T) {
+	_, _, context, keeper, _ := setupKeeperAndContext(t)
+	ctx := sdk.UnwrapSDKContext(context)
+	setupParams(&context, keeper)
 
 	halMeta := keeper.HALMeta(ctx)
 	require.EqualValues(t, types.TokenMeta{
@@ -85,6 +87,13 @@ func TestConfigurations(t *testing.T) {
 
 	params := keeper.GetParams(ctx)
 
+	var collateralMeta []types.TokenMeta
+	collateralMeta = append(collateralMeta, types.TokenMeta{
+		Denom:       "coin",
+		Decimals:    6,
+		Description: "",
+	})
+
 	require.EqualValues(t, types.Params{
 		RedeemDur:        10000,
 		MaxRedeemEntries: 10,
@@ -92,4 +101,36 @@ func TestConfigurations(t *testing.T) {
 		HalMeta:          types.TokenMeta{Denom: "hal", Decimals: 6, Description: ""},
 	}, params)
 
+}
+
+func TestMintHal(t *testing.T) {
+	bank, _, context, keeper, server := setupKeeperAndContext(t)
+	setupParams(&context, keeper)
+	coin := sdk.NewCoins(sdk.Coin{
+		Denom:  "coin",
+		Amount: sdk.NewInt(10000),
+	})
+
+	bank.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	bank.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	bank.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	msg, err := server.MintHAL(context, &types.MsgMintHAL{
+		Address:          testutil.Alice,
+		CollateralAmount: coin,
+	})
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	halCoin := sdk.Coin(sdk.Coin{
+		Denom:  "hal",
+		Amount: sdk.NewInt(10000),
+	})
+
+	require.EqualValues(t, &types.MsgMintHALResponse{
+		MintedAmount:      halCoin,
+		CollateralsAmount: coin,
+	}, msg)
 }
