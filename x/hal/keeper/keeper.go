@@ -69,6 +69,7 @@ func (k Keeper) ConvertCollateralsToHAL(ctx sdk.Context, colCoins sdk.Coins) (ha
 		}
 
 		// Convert collateral -> HAL, note actually used collateral amount
+		// * colConvertedCoin is Hal, colUsedCoin is collateral used
 		colConvertedCoin, colUsedCoin, err := colMeta.ConvertCoin2(colCoin, halMeta)
 		if err != nil {
 			retErr = sdkErrors.Wrapf(types.ErrInternal, "converting collateral token (%s) to HAL: %v", colCoin, err)
@@ -93,18 +94,23 @@ func (k Keeper) ConvertHALToCollaterals(ctx sdk.Context, halCoin sdk.Coin) (halU
 	}
 
 	// Sort active pool coins from the highest supply to the lowest normalizing amounts
+	// * returns the active coins in a give pool
 	poolCoins := k.ActivePool(ctx)
-
+	// * returns meta with higest decimal points
 	baseMeta := k.BaseMeta(ctx)
+
 	poolCoinsNormalizedSet := make(map[string]sdk.Int)
 	for _, poolCoin := range poolCoins {
+		// * check if the coin in the pool is supported.
 		poolMeta, ok := colMetas[poolCoin.Denom]
 		if !ok {
 			k.Logger(ctx).Info("Collateral meta not found for ActivePool coin (skip)", "denom", poolCoin.Denom)
 			continue
 		}
 
+		// * if the coin is found the supported list, then normalize the decimals according to baseMeta
 		normalizedCoin, err := poolMeta.NormalizeCoin(poolCoin, baseMeta)
+
 		if err != nil {
 			retErr = sdkErrors.Wrapf(types.ErrInternal, "normalizing ActivePool coin (%s): %v", poolCoin, err)
 			return
@@ -128,9 +134,13 @@ func (k Keeper) ConvertHALToCollaterals(ctx sdk.Context, halCoin sdk.Coin) (halU
 	// Fill up the desired HAL amount with the current Active pool collateral supply
 	halLeftToFillCoin := halCoin
 	for _, poolCoin := range poolCoins {
+		// ! [High] if the error is not checked, the token will be picked
+		// ! even tho it does not exist in the supported token list.
 		poolMeta, _ := colMetas[poolCoin.Denom] // no need to check the error, since it is checked above
-
 		// Convert collateral -> HAL to make it comparable
+
+		// * converting the collateral to the equivalent to halMeta
+		// * poolConvertedCoin = Coin{ Denom:Hal, Amount: amount of collat in terms of HalToken}
 		poolConvertedCoin, err := poolMeta.ConvertCoin(poolCoin, halMeta)
 		if err != nil {
 			retErr = sdkErrors.Wrapf(types.ErrInternal, "converting pool token (%s) to HAL: %v", poolCoin, err)
@@ -139,11 +149,26 @@ func (k Keeper) ConvertHALToCollaterals(ctx sdk.Context, halCoin sdk.Coin) (halU
 
 		// Define HAL left to fill reduce amount (how much could be covered by this collateral)
 		halReduceCoin := halLeftToFillCoin
+
+		// ? what if halReduceCoin is < poolConvertedCoin ?
+		// * todo
+
+		// ? what if halReducatedCoin < poolConvertedCoin
+		// * then halReduceCoin = halLeftToFillCoin
+		// * in the first loop iteration, this means
+		// * halReduceCoin is the full amount. (case A)
 		if poolConvertedCoin.IsLT(halReduceCoin) {
-			halReduceCoin = poolConvertedCoin
+			halReduceCoin = poolConvertedCoin // * case B
 		}
 
 		// Convert HAL reduce amount to collateral
+		// * halReduceCoin = Coin{ Denom:Hal, Amount: amount of collat in terms of HalToken} Case B
+		// * colCoin is the Destcoin, halReduceUsedCoin is the Srccoin
+		// * for (case A), colCoin will be the full amount. same goes for halReduceUsedCoin.
+		// * poolMeta is a given collateral coin.
+		// * need to convert from hal -> poolMetaA
+		// * colCoin is poolMeta coin in terms of Hal.
+		// * basically colCoin.amount == halReduceUsedCoin.amount
 		colCoin, halReduceUsedCoin, err := halMeta.ConvertCoin2(halReduceCoin, poolMeta)
 		if err != nil {
 			retErr = sdkErrors.Wrapf(types.ErrInternal, "converting HAL reduce token (%s) to collateral denom (%s): %v", halReduceCoin, poolMeta.Denom, err)
@@ -156,7 +181,9 @@ func (k Keeper) ConvertHALToCollaterals(ctx sdk.Context, halCoin sdk.Coin) (halU
 		}
 
 		// Apply current results
+		// * for (case A) halLeftToFillCoin is 0
 		halLeftToFillCoin = halLeftToFillCoin.Sub(halReduceUsedCoin)
+		// * for (case A) colCoins is the fill amount.
 		colCoins = colCoins.Add(colCoin)
 
 		// Check if redeem amount is filled up
@@ -164,6 +191,9 @@ func (k Keeper) ConvertHALToCollaterals(ctx sdk.Context, halCoin sdk.Coin) (halU
 			break
 		}
 	}
+	// * halCoin is passed to this function
+	// * through req.halAmount
+	// * for (case A), halUsedCoin is 0.
 	halUsedCoin = halCoin.Sub(halLeftToFillCoin)
 
 	return
